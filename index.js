@@ -2,7 +2,10 @@ var fs = require('fs');
 
 var oven = require('openbadges-bakery');
 var crypto = require('crypto');
-var jay = require('jayschema');
+var jaySchema = require('jayschema');
+var js = new jaySchema;
+var clc = require('cli-color');
+
 var fileStorage = require('./fileStorage.js');
 
 var output_path = 'output_badges';
@@ -15,8 +18,11 @@ var componentsLoaded = 0;
 var numberOfComponents = 2;
 
 var schema; 
-var images;
+var images=[];
+var report=[];
+var errors=[];
 
+//Operation Control: 
 //Start here: load schemas and files, then when that's ready, start processing:
 //loadAllFiles(type, directory, callback)
 fileStorage.loadAllFiles('schema','schema',processLoadedObject);
@@ -24,102 +30,137 @@ fileStorage.loadAllFiles('images','unknown_badges', processLoadedObject);
 
 function processLoadedObject(type, loadedObject, errors){
 	console.log("LOADING "+ type + " --- CALLBACK RECEIVED.");
-	if (type = 'schema')
+	if (type === 'schema'){
 		schema=loadedObject;
-	else if (type = 'images')
+	}
+	else if (type === 'images'){
 		images=loadedObject;
+	}
 	componentsLoaded++;
-	if (componentsLoaded === numberOfComponents)
+	if (componentsLoaded === numberOfComponents){
 		loadingDone();
-	if(errors)
+	}
+	if(errors){
 		console.log("LOADING "+ type + " --- CALLBACK RECEIVED, BUT..... THERE WERE SOME ERRORS: \n" + errors);
+	}
 }
 
 
 function loadingDone(){
-	return;
+	//create an empty array
+	for (var i=0; i < images.length; i++){
+		report.push({
+			image: images[i],
+			assertion:{},
+			matchingSchema:[],
+			nonMatchingSchema:[]
+		});
+	}
+	images.forEach(extractAssertion);
+}
+
+function evaluateCompleteness(){
+	var numberOfSchema = schema.length;
+	for (var i=0;i<report.length;i++){
+		// break if any image has not yet been tested against the appropriate number of schema.
+		if (report[i].matchingSchema.length+report[i].nonMatchingSchema.length < numberOfSchema)
+			return;
+	}
+	//finish if all images have been processed.
+	processReport();
+}
+
+function processReport(){
+	for (var i=0;i<report.length;i++){
+		console.log(
+			"\n\n==========================================\n" + 
+			"Report for Image #" + i + ":\n" +
+			report[i].assertion + "\n" +
+			"Matching Schema: "
+		);
+		if (report[i].matchingSchema.length >0){
+			for (var b=0; b<report[i].matchingSchema.length; b++){
+				console.log(
+					"#" + report[i].matchingSchema[b].index 
+					 + " " + schema[report[i].matchingSchema[b].index].title
+				);
+			}
+		}
+		console.log( "\nNon-matching Schema: ");
+		if (report[i].nonMatchingSchema.length>0){
+			for (var b=0; b<report[i].nonMatchingSchema.length; b++){
+				console.log(
+					"#" + report[i].nonMatchingSchema[b].index + " " + schema[report[i].nonMatchingSchema[b].index].title + "\n" +
+					"Errors: \n" + typeof report[i].nonMatchingSchema[b].errors + "\n" +
+					clc.yellow(JSON.stringify(report[i].nonMatchingSchema[b].errors))
+				);
+			}
+		}
+	}
 }
 
 
-// function FilesToProcess(){
-// 	this.filesToLoad = 6;
-// 	this.files=[];
-// 	this.loadedFile = function(err, newFileData){
-// 		if(!err){
-// 			this.files.push=newFileData;
-// 			this.updated();
-// 		}
-// 		else
-// 			log_error("I couldn't load a file: " + err);
-// 	};
-// 	this.updated = function(){
-// 		if (this.files.length === this.filesToLoad){
-// 			loadComponent();
-// 		}
-// 	};
 
-// }
-// var unknown_badges = new FilesToProcess();
+// Badge Utilities:
+function extractAssertion(image,index,array){
+	oven.extract(image,function(err,assertion){
+		if(err){ log_error("Could not extract assertion from image #" + index);}
+		else{
+			report[index].assertion=assertion;
+			matchAssertionToSchema(assertion,index,array);
+		}
+	});
+}
+
+function matchAssertionToSchema(assertion,imageIndex,array){
+	for (var schemaIndex=0; schemaIndex<schema.length; schemaIndex++){
+		//log_error("SCHEMA INDEX: " + schemaIndex);
+		validateIt(assertion,schemaIndex,imageIndex,array);
+	}
+}
+
+function validateIt(assertion,schemaIndex,imageIndex,array){
+	js.validate(JSON.parse(assertion),schema[schemaIndex],function(validationErrors){
+
+		// log_error("\n\nVALIDTION TIME: validating assertion: \n" + assertion + "\n\n"
+		//  	+ "Schema: #" + schemaIndex + "\n" + JSON.stringify(schema[schemaIndex]) + "\n\n\n"
+		//  );
+
+		// for non-matching schema
+		if(validationErrors){
+			//log_error("Jeeves here: Reporting a validation error: " + typeof validationErrors + "\n" + validationErrors + validationErrors.message);
+			report[imageIndex].nonMatchingSchema.push({
+				index: schemaIndex,
+				errors: validationErrors
+			});
+		}
+		//for matching schema
+		else {
+			report[imageIndex].matchingSchema.push({
+				index: schemaIndex
+			});
+			manipulateAssertion(imageIndex,schemaIndex);
+		}
+		evaluateCompleteness();
+	});
+}
+
+function manipulateAssertion(imageIndex,schemaIndex){
+	log_error("NOT IMPLEMENTED: Processing Image #" + imageIndex + " based on Schema #" + schemaIndex);
+} 
 
 
-
-// function loadComponent(){
-// 	stuffLoaded++;
-// 	if (componentsLoaded === 2)
-// 		startProcessing();
-// }
-
-
-// /* 
-// main()!
-// Start execution here!
-// */
-// fs.readdir(input_path,read_image_dir);
-
-
-// function startProcessing(){
-// 	log_error("-=-=-=- FILES & SCHEMA LOADED; STARTING PROCESSING -=-=-=-");
-// }
-
-
-
-
-// //utils
-// function log_error(err){
-// 	console.log(err);
-// 	errors.push(err);
-// }
-
-
-// //image file utilities
-// function read_image_dir(err,files) {
-// 	if(!err){
-// 		number_of_files = files.length;
-// 		files.forEach(read_image_for_extraction);	
-// 	}
-// 	else {
-// 		log_error(err);
-// 	}
-// }
-
-// function read_image_for_extraction(filename,index,array){
-// 	fs.readFile(input_path + '/' + filename, unknown_badges.loadedFile);
-// }
+//General Utilities:
+function log_error(err){
+	console.log(err);
+	errors.push(err);
+}
 
 
 
 
 
 
-// function extract_assertion(err, data){
-// 	if(!err){
-// 		var assertion = oven.extract(data,modify_assertion)
-// 	}
-// 	else {
-// 		log_error(err);
-// 	}
-
-// }
 
 
 // function modify_assertion(extract_err,data){

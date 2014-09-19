@@ -14,6 +14,7 @@
   "license": "MIT",
   "dependencies": {
     "openbadges-bakery": "~1.0.4",
-    "jayschema": "~0.2.7"
+    "jayschema": "~0.2.7",
+    "cli-color": "~0.3.2"
   }
 }

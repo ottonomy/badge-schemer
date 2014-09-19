@@ -1,6 +1,6 @@
 {
 	"$schema": "http://json-schema.org/draft-04/schema#",
-	"title": "Totally 1.0-compliant w/linked Badge Class",
+	"title": "0.5 Badge Assertion",
 	"description": "The 1.0 OBI specification mandates that the baked assertion be an object with linked Badge Class",
 	"type": "object",
 	"definitions": {
@@ -22,10 +22,6 @@
             { "$ref": "#/definitions/UNIXTimeStamp" }
             ]
         },
-		"IdentityType": {
-            "type": "string",
-            "enum": ["email"]
-        },
         "HashString": {
             "allOf": [ { "type": "string" } ],
             "oneOf": [ 
@@ -39,22 +35,6 @@
                 }
             ]    
         },
-        "IdentityObject": { 
-            "title": "Badge Identity Object",
-            "type": "object",
-            "properties": {
-                "identity": {
-                    "oneOf": [
-                        { "$ref": "#/definitions/HashString"},
-                        { "type": "string", "format": "email"}
-                    ]
-                },
-                "type": { "$ref": "#/definitions/IdentityType" },
-                "hashed": { "type": "boolean" },
-                "salt": { "type": "string" }
-            },
-            "required": ["identity","type","hashed"]
-        },
         "VerificationObject": { 
             "type": "object",
             "properties": {
@@ -66,17 +46,24 @@
                 "url": { "type": "string", "format": "uri" }
             },
             "required": ["type"]
+        },
+        "BadgeObject": {
+            "type": "object"
         }
 	},
 	"properties": {
 		"uid": { "type": "string" },
-        "recipient": { "$ref": "#/definitions/IdentityObject" },
-        "badge": {  "type": "string", "format": "uri" },
-        "verify": { "$ref": "#/definitions/VerificationObject" },
-        "issuedOn": { "$ref": "#/definitions/DateTime" },
-        "evidence": { "type": "string", "format": "uri" },
-        "expires": { "$ref": "#/definitions/DateTime" }
+        "recipient": { "oneOf": [
+            { "$ref": "#/definitions/HashString"},
+            { "type": "string", "format": "email"}
+        ] },
+        "salt": { "type": "string" },
+        "badge": {"oneOf":[
+            {  "type": "string", "format": "uri" },
+            { "$ref": "#/definitions/BadgeObject" }
+        ]},
+        "verify": { "$ref": "#/definitions/VerificationObject" }
     },
-    "required": ["uid", "recipient", "badge", "verify", "issuedOn"],
+    "required": ["recipient", "badge", "verify"],
     "additionalProperties": true   
 }
