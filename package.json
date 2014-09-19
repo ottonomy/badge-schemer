@@ -1,0 +1,19 @@
+{
+  "name": "badge-manipulator",
+  "version": "0.0.0",
+  "description": "Parses a library of badge images and replaces unknown identities with known identitites. Copies result to a new folder.",
+  "main": "index.js",
+  "scripts": {
+    "test": "tap test"
+  },
+  "keywords": [
+    "open",
+    "badges"
+  ],
+  "author": "Nate Otto",
+  "license": "MIT",
+  "dependencies": {
+    "openbadges-bakery": "~1.0.4",
+    "jayschema": "~0.2.7"
+  }
+}
