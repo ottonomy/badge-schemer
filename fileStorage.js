@@ -17,8 +17,10 @@ var FileCollection = function (){
 			this.errors.push(err);
 		else {
 			if (this.item_type === 'json' || this.item_type === 'schema'){
-				if (this.validateJSON(newFile))
+				if (this.validateJSON(newFile)){
+					//console.log("type of file is " + typeof newFile + ".\n" + newFile);
 					this.files.push(JSON.parse(newFile));
+				}
 				else
 					this.errors.push(new Error(1,"JSON item type didn't parse right: \n" + newFile));
 			}

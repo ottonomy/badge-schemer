@@ -53,7 +53,8 @@ function loadingDone(){
 			image: images[i],
 			assertion:{},
 			matchingSchema:[],
-			nonMatchingSchema:[]
+			nonMatchingSchema:[],
+			errors: []
 		});
 	}
 	images.forEach(extractAssertion);
@@ -63,7 +64,7 @@ function evaluateCompleteness(){
 	var numberOfSchema = schema.length;
 	for (var i=0;i<report.length;i++){
 		// break if any image has not yet been tested against the appropriate number of schema.
-		if (report[i].matchingSchema.length+report[i].nonMatchingSchema.length < numberOfSchema)
+		if (report[i].errors.length===0 && report[i].matchingSchema.length+report[i].nonMatchingSchema.length < numberOfSchema)
 			return;
 	}
 	//finish if all images have been processed.
@@ -110,7 +111,10 @@ function sanitizeJaySchemaError(error){
 // Badge Utilities:
 function extractAssertion(image,index,array){
 	oven.extract(image,function(err,assertion){
-		if(err){ log_error("Could not extract assertion from image #" + index);}
+		if(err){ 
+			log_error("Could not extract assertion from image #" + index + ": " + err.message); 
+			report[index].errors.push(err.message);
+		}
 		else{
 			report[index].assertion=assertion;
 			matchAssertionToSchema(assertion,index,array);
@@ -127,10 +131,6 @@ function matchAssertionToSchema(assertion,imageIndex,array){
 
 function validateIt(assertion,schemaIndex,imageIndex,array){
 	js.validate(JSON.parse(assertion),schema[schemaIndex],function(validationErrors){
-
-		// log_error("\n\nVALIDTION TIME: validating assertion: \n" + assertion + "\n\n"
-		//  	+ "Schema: #" + schemaIndex + "\n" + JSON.stringify(schema[schemaIndex]) + "\n\n\n"
-		//  );
 
 		// for non-matching schema
 		if(validationErrors){

@@ -1,14 +1,13 @@
 {
 	"$schema": "http://json-schema.org/draft-04/schema#",
 	"title": "0.5 Badge Assertion",
-	"description": "The 1.0 OBI specification mandates that the baked assertion be an object with linked Badge Class",
-	"type": "object",
+	"description": "An amalgam of 0.5.0 OBI specifications mandates that the assertion be an object with embedded badge and issuer properties.",
 	"definitions": {
 		"ISODateTime": {
-            "description": "ISO 8601 date format string yyyy-MM-dd'T'HH:mm:ss.SSS with optional .SSS milliseconds",
+            "description": "ISO 8601 date format string yyyy-mm-dd",
             "allOf": { "type": "string" },
             "oneOf": [
-                { "pattern": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d((.|,)\\d{1,3})?(Z|[+-][0-2]\\d(:?[0-5]\\d)?)$" }
+                { "pattern": "^\\d{4}-[01]\\d-[0-3]\\d$" }
             ]
         },
         "UNIXTimeStamp": {
@@ -35,35 +34,84 @@
                 }
             ]    
         },
-        "VerificationObject": { 
+        "BadgeObject": {
+            "description": "an object describing the achievement earned by the recipient of the assertion.",
             "type": "object",
             "properties": {
-                "type": { 
-                    "title": "VerificationType",
+                "version": { 
+                    "description": "The version of the OBI specification used. 0.5.0 in this case.",
                     "type": "string", 
-                    "enum": ["hosted", "signed"] 
+                    "pattern": "0\\.5\\.0" 
                 },
-                "url": { "type": "string", "format": "uri" }
+                "name": {  
+                    "description": "Human-readable name of the badge being issued. Maximum of 128 characters.",
+                    "type": "string"
+                },
+                "description": {
+                    "description": "Description of the badge being issued.",
+                    "type": "string"
+                },
+                "image": { "type":"string", "format": "url" },
+                "criteria": { 
+                    "description": "URL describing the badge and criteria for earning the badge (Not the specific instance of the badge).", 
+                    "type": "string", 
+                    "format": "url" 
+                },
+                "issuer": { "$ref": "#/definitions/Issuer" }
             },
-            "required": ["type"]
+            "required": ["name","image","description","criteria","issuer"]
         },
-        "BadgeObject": {
-            "type": "object"
+        "Issuer": {
+            "description": "Information about the issuer.",
+            "type": "object",
+            "properties": {
+                "origin": { "type": "string", "format": "url", "description": "Origin of the issuer. This is the <protocol>://<host>:<port>. Must match the origin of the hosted assertion (and in the future, the origin of the public key)." },
+                "name": {  
+                    "description": "Human-readable name of the issuing agent.",
+                    "type": "string"
+                },
+                "org": {
+                    "description":"(OPTIONAL) Organization for which the badge is being issued.",
+                    "type": "string"
+                },
+                "contact": {
+                    "description": "(OPTIONAL) A human-monitored email address associated with the issuer.",
+                    "type": "string",
+                    "format": "email"
+                }
+            },
+            "required": ["origin", "name"]
         }
-	},
-	"properties": {
-		"uid": { "type": "string" },
-        "recipient": { "oneOf": [
-            { "$ref": "#/definitions/HashString"},
-            { "type": "string", "format": "email"}
-        ] },
-        "salt": { "type": "string" },
-        "badge": {"oneOf":[
-            {  "type": "string", "format": "uri" },
-            { "$ref": "#/definitions/BadgeObject" }
-        ]},
-        "verify": { "$ref": "#/definitions/VerificationObject" }
     },
-    "required": ["recipient", "badge", "verify"],
-    "additionalProperties": true   
+
+    "allOf": [{
+        "type": "object",
+        "properties": {
+            "badge": { "$ref": "#/definitions/BadgeObject" },
+            "issued_on": { "$ref": "#/definitions/DateTime" },
+            "expires": { "$ref": "#/definitions/DateTime" },
+            "evidence": { "type": "string", "format": "url" }
+        },
+        "required": ["badge"],
+        "additionalProperties": true
+    }],
+    "oneOf":  [
+        { 
+            "description": "Hashed and salted recipient identity. As updated March 2012",
+            "type": "object",
+            "properties": {
+                "recipient": { "$ref": "#/definitions/HashString"},
+                "salt": { "type": "string" }
+            },
+            "required": ["recipient"]
+        },
+        {
+             "description": "Unobscured plaintext email address of recipient identity. Original as of Fall 2011",
+            "type":"object",
+            "properties": {
+                "recipient": { "type": "string", "format": "email" }
+            },
+            "required": "recipient"
+        }
+    ] 
 }
