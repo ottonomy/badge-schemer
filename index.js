@@ -18,15 +18,49 @@ var componentsLoaded = 0;
 var numberOfComponents = 2;
 
 var schema; 
-var images=[];
+var images;
 var report=[];
 var errors=[];
+
+var schemer = {
+	plain_url: {
+		filename: "plainuri.json",
+		schema: {}
+	},
+	v0_5: {
+		filename: "OBI-v0.5-assertion.json",
+		schema: {}
+	},
+	v1_0strict: {
+		filename: "OBI-v1.0-linked-badgeclass.json",
+		schema: {}
+	}
+};
+
+// Let's try something else: Load schema into an object one by one, then test images against them in a known
+// sequence instead of letting the async go wild.
+for (var key in schemer){
+	
+}
+
+//callback has signature (err, data)
+function loadOneSchema(inputPath, inputFile, destKey){
+	fs.readFile(inputPath + "/" + inputFile, functin(err,data){
+		if(!err) schemer[destKey].schema=data;
+		else log_error("Could not load schema "+ destKey)
+	});
+}
+
+function schemaLoadedCheck(){
+
+}
+
 
 //Operation Control: 
 //Start here: load schemas and files, then when that's ready, start processing:
 //loadAllFiles(type, directory, callback)
 fileStorage.loadAllFiles('schema','schema',processLoadedObject);
-fileStorage.loadAllFiles('images','unknown_badges', processLoadedObject);
+//fileStorage.loadAllFiles('images','unknown_badges', processLoadedObject);
 
 function processLoadedObject(type, loadedObject, errors){
 	console.log("LOADING "+ type + " --- CALLBACK RECEIVED.");
