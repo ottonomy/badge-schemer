@@ -89,9 +89,9 @@ function processReport(){
 		console.log( "\nNon-matching Schema: ");
 		if (report[i].nonMatchingSchema.length>0){
 			for (var b=0; b<report[i].nonMatchingSchema.length; b++){
+				report[i].nonMatchingSchema[b].errors = sanitizeJaySchemaError(report[i].nonMatchingSchema[b].errors)
 				console.log(
 					"#" + report[i].nonMatchingSchema[b].index + " " + schema[report[i].nonMatchingSchema[b].index].title + "\n" +
-					"Errors: \n" + typeof report[i].nonMatchingSchema[b].errors + "\n" +
 					clc.yellow(JSON.stringify(report[i].nonMatchingSchema[b].errors))
 				);
 			}
@@ -99,6 +99,12 @@ function processReport(){
 	}
 }
 
+function sanitizeJaySchemaError(error){
+	for (var i=0; i< error.length; i++){
+		error[i].stack=undefined;
+	}
+	return error;
+}
 
 
 // Badge Utilities:
@@ -148,6 +154,8 @@ function validateIt(assertion,schemaIndex,imageIndex,array){
 function manipulateAssertion(imageIndex,schemaIndex){
 	log_error("NOT IMPLEMENTED: Processing Image #" + imageIndex + " based on Schema #" + schemaIndex);
 } 
+
+
 
 
 //General Utilities:
