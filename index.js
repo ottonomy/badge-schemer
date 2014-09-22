@@ -6,132 +6,264 @@ var jaySchema = require('jayschema');
 var js = new jaySchema;
 var clc = require('cli-color');
 
-var fileStorage = require('./fileStorage.js');
+//configuration:
+var CONFIG = function(key){
+	var attributes = {
+		output_path: 'output_badges',
+		input_path: 'unknown_badges',
+		schema_directory: 'schema',
+	};
 
-var output_path = 'output_badges';
-var input_path = 'unknown_badges';
-var errors = [];
-var number_of_files = 0;
+	return attributes[key];
+};
 
-// this lets us know when both the schema and the assertions to process have been loaded
-var componentsLoaded = 0;
-var numberOfComponents = 2;
+// an object to build out our findings on what images there are and what schema match those images:
+var report = {
+	images: [],
+	findImage: function(filename){
+		for (var i=0; i<this.images.length; i++){
+			if (this.images[i].filename === filename)
+				return i;
+		}
+		return -1;
+	},
+	newImageMatch: function(filename,assertion,schemaKey){
+		// first, make sure we don't already have a record for this image. 
+		// If we do, augment that image's list of schema matches.
+		var existingIndex = this.findImage(filename);
+		if (existingIndex>=0)
+			this.images[existingIndex].matchingSchemaKeys.push(schemaKey);
+		//if not existing, add a new record
+		else
+			this.images.push({
+				filename: filename,
+				assertion: assertion,
+				matchingSchemaKeys: [schemaKey],
+				nonMatches: []	
+			});
+	},
+	newImageNonMatch: function(filename,assertion,schemaKey,errorMessage){
+		newNonMatch = {
+			schemaKey: schemaKey,
+			errorMessage: errorMessage
+		};
+		// first, make sure we don't already have a record for this image.
+		// If we do, augment that image's record of non-matches
+		var existingIndex = this.findImage(filename);
+		if (existingIndex>=0)
+			this.images[existingIndex].nonMatches.push(newNonMatch);
+		//if not existing, add a new record
+		else
+			this.images.push({
+				filename: filename,
+				assertion: assertion,
+				matchingSchemaKeys: [],
+				nonMatches: [newNonMatch]	
+			});
+	},
+	imageCount: 0
+};
 
-var schema; 
-var images;
-var report=[];
-var errors=[];
-
+//an object for us to store our understanding of what schema we have available to us:
 var schemer = {
-	plain_url: {
-		filename: "plainuri.json",
-		schema: {}
+	schema: {
+		plain_url: {
+			filename: "plainuri.json"
+		},
+		v0_5: {
+			filename: "OBI-v0.5-assertion.json"
+		},
+		v1_0strict: {
+			filename: "OBI-v1.0-linked-badgeclass.json"
+		},
+		backpack_error_1_0: {
+			filename: "backpack-error-from-valid-1.0.json"
+		}
 	},
-	v0_5: {
-		filename: "OBI-v0.5-assertion.json",
-		schema: {}
-	},
-	v1_0strict: {
-		filename: "OBI-v1.0-linked-badgeclass.json",
-		schema: {}
+	search_tree: {
+		test: "backpack_error_1_0",
+		noMatch: {
+			test: "plain_url",
+			noMatch: {
+				test: "v1_0strict",
+				noMatch: {
+					test: "v0_5"
+				}
+			}
+		}
 	}
 };
 
-// Let's try something else: Load schema into an object one by one, then test images against them in a known
+/* OPERATION CONTROL: Load schema into an object one by one, then test images against them in a known
 // sequence instead of letting the async go wild.
-for (var key in schemer){
-	
+*/
+for (var key in schemer.schema){
+	loadOneSchema(CONFIG('schema_directory'),schemer.schema[key].filename,key);
 }
+
 
 //callback has signature (err, data)
 function loadOneSchema(inputPath, inputFile, destKey){
-	fs.readFile(inputPath + "/" + inputFile, functin(err,data){
-		if(!err) schemer[destKey].schema=data;
-		else log_error("Could not load schema "+ destKey)
+	fs.readFile(inputPath + "/" + inputFile, function (err,data){
+		if(!err){ 
+			try{ var jsonSchema = JSON.parse(data) }
+			catch(e) { console.log(e); jsonSchema = undefined; }
+
+			if(jsonSchema)
+				schemer.schema[destKey].schema=jsonSchema;
+			schemaLoadedCheck();
+		}
+		else log_error("Could not load schema "+ destKey + ":\n" + err);
 	});
 }
 
+
 function schemaLoadedCheck(){
+	var totalSchema = 0;
+	var loadedSchema = 0;
+	for (var key in schemer.schema){
+		totalSchema++;
+		if(typeof schemer.schema[key].schema === 'object')
+			loadedSchema++;
+	}
+	if (loadedSchema===totalSchema)
+		doneLoadingSchema();
+}
 
+function doneLoadingSchema(){
+	console.log("Schema have successfully been loaded from directory: " + CONFIG('schema_directory'));
+	listImagesToTest(CONFIG('input_path'));
 }
 
 
-//Operation Control: 
-//Start here: load schemas and files, then when that's ready, start processing:
-//loadAllFiles(type, directory, callback)
-fileStorage.loadAllFiles('schema','schema',processLoadedObject);
-//fileStorage.loadAllFiles('images','unknown_badges', processLoadedObject);
+//Figure out what iamges there are to test and start loading them:
+function listImagesToTest(inputPath){
+	// start the process by getting the filenames of the files to load, and figuring out how many there are
+	fs.readdir(inputPath, function (err,files) {
+		if(!err){
 
-function processLoadedObject(type, loadedObject, errors){
-	console.log("LOADING "+ type + " --- CALLBACK RECEIVED.");
-	if (type === 'schema'){
-		schema=loadedObject;
+			files = cleanFileArray(files)
+			report.imageCount = files.length;
+
+			files.forEach(function (filename,index,array){
+				fs.readFile(inputPath + '/' + filename, function (singleReadErr, imageData){
+					processImage(singleReadErr, imageData, filename);
+				});
+			});	
+		}
+		else {
+			log_error("Error determining how many images are in directory (" + inputPath + "): " + err);
+		}
+	});
+}
+
+//deletes hidden filenames from array (those that start with '.')
+function cleanFileArray(filenameArray){
+	var i = 0;
+	var illegalPattern = /^\..+$/;
+	while (i< filenameArray.length){
+		if (illegalPattern.test(filenameArray[i])) {
+			filenameArray.splice(i,1);
+		}
+		else 
+			i++;
 	}
-	else if (type === 'images'){
-		images=loadedObject;
-	}
-	componentsLoaded++;
-	if (componentsLoaded === numberOfComponents){
-		loadingDone();
-	}
-	if(errors){
-		console.log("LOADING "+ type + " --- CALLBACK RECEIVED, BUT..... THERE WERE SOME ERRORS: \n" + errors);
-	}
+	return filenameArray;
 }
 
 
-function loadingDone(){
-	//create an empty array
-	for (var i=0; i < images.length; i++){
-		report.push({
-			image: images[i],
-			assertion:{},
-			matchingSchema:[],
-			nonMatchingSchema:[],
-			errors: []
+/* The MEAT and POTATOES:
+// Process each image against all the schema in an order that makes sense and gives us a useful 
+*/
+
+function processImage(readErr, imageData, filename){
+	console.log("TODO: processImage(" + readErr + " errors, " + filename + ")");
+	if(!readErr){
+		// extract the assertion and start testing it against schema.
+		oven.extract(imageData, function (extractErr,assertion){
+			if(extractErr){
+				log_error("Could not extract assertion from image " + filename + ": " + extractErr.message);
+			}
+			else{
+				try { assertion = JSON.parse(assertion); }
+				catch(e) { console.log(clc.yellow("JSON.parse fail: " + assertion));}
+				var search_tree = schemer.search_tree;
+				findSchemaMatch(assertion, search_tree, filename);
+			}
 		});
 	}
-	images.forEach(extractAssertion);
 }
 
+/* Find a schema match by cycling through a search tree:
+ * Receives a search tree object with properties:
+ 	* test: string of schema key to test
+ 	* match: new search_tree for additional matches
+ 	* noMatch: new search_tree, still try to find first match
+ * searches recursively, building out the results into report
+*/
+function findSchemaMatch(assertion, search_tree, filename){
+	var schemaKey = search_tree.test;
+	// console.log(clc.yellow('==============================================='));
+	// console.log(clc.yellow("Going to validate, my dawg... The schema is: "));
+	// console.log(typeof schemer.schema[schemaKey].schema + "\n" + JSON.stringify(schemer.schema[schemaKey].schema));
+	// console.log(clc.yellow("Going to validate, my dawg... The assertion is: "));
+	// console.log(typeof assertion + "\n" + JSON.stringify(assertion));
+
+
+	js.validate(assertion, schemer.schema[schemaKey].schema, function (validateErr){
+		if(validateErr){
+			// log_error("Validation failed: " + typeof validateErr + "\n" + validateErr + clc.yellow(validateErr.message));
+			report.newImageNonMatch(filename,assertion,schemaKey,sanitizeJaySchemaError(validateErr));
+			if(typeof search_tree.noMatch != 'undefined' && typeof search_tree.noMatch.test != 'undefined'){
+				findSchemaMatch(assertion, search_tree.noMatch, filename);
+				return;
+			}
+		}
+		//for matching schema
+		else {
+			report.newImageMatch(filename,assertion,schemaKey);
+			if(typeof search_tree.match != 'undefined' && typeof search_tree.match.test != 'undefined'){
+				findSchemaMatch(assertion, search_tree.match, filename);
+				return;
+			}
+		}
+		//if search tree hasn't turned up another schema to search by...
+		evaluateCompleteness();
+	});
+}
+
+/* The method of determining whether or not this is complete is by detecting if all images have been reported on, 
+// at least minimally. This will probably miss a final test or two. TODO: Improve this!
+*/
 function evaluateCompleteness(){
-	var numberOfSchema = schema.length;
-	for (var i=0;i<report.length;i++){
-		// break if any image has not yet been tested against the appropriate number of schema.
-		if (report[i].errors.length===0 && report[i].matchingSchema.length+report[i].nonMatchingSchema.length < numberOfSchema)
-			return;
+	if (report.images.length === report.imageCount){
+		for (var i=0; i<report.images.length;i++){
+			img = report.images[i]
+			console.log(
+				'\n\n=========== IMAGE NUMBER ' + i + ' ===========' +
+				'\nfilename: ' + img.filename + 
+				'\nassertion: ' + clc.green(JSON.stringify(img.assertion)) +
+				'\nmatchingSchemaKeys: ' + img.matchingSchemaKeys
+			);
+			if(img.nonMatches.length>0){
+				console.log('nonMatches:');
+				for (var j=0;j<img.nonMatches.length;j++){
+					nm = img.nonMatches[j]
+					console.log('Schema: ' +nm.schemaKey);
+					console.log(clc.red(JSON.stringify(nm.errorMessage)));
+				}
+			}
+			console.log('======================================');
+		}
 	}
-	//finish if all images have been processed.
-	processReport();
 }
 
-function processReport(){
-	for (var i=0;i<report.length;i++){
-		console.log(
-			"\n\n==========================================\n" + 
-			"Report for Image #" + i + ":\n" +
-			report[i].assertion + "\n" +
-			"Matching Schema: "
-		);
-		if (report[i].matchingSchema.length >0){
-			for (var b=0; b<report[i].matchingSchema.length; b++){
-				console.log(
-					"#" + report[i].matchingSchema[b].index 
-					 + " " + schema[report[i].matchingSchema[b].index].title
-				);
-			}
-		}
-		console.log( "\nNon-matching Schema: ");
-		if (report[i].nonMatchingSchema.length>0){
-			for (var b=0; b<report[i].nonMatchingSchema.length; b++){
-				report[i].nonMatchingSchema[b].errors = sanitizeJaySchemaError(report[i].nonMatchingSchema[b].errors)
-				console.log(
-					"#" + report[i].nonMatchingSchema[b].index + " " + schema[report[i].nonMatchingSchema[b].index].title + "\n" +
-					clc.yellow(JSON.stringify(report[i].nonMatchingSchema[b].errors))
-				);
-			}
-		}
-	}
+
+
+//General Utilities:
+function log_error(err){
+	console.log(err);
+	// errors.push(err);
 }
 
 function sanitizeJaySchemaError(error){
@@ -141,130 +273,3 @@ function sanitizeJaySchemaError(error){
 	return error;
 }
 
-
-// Badge Utilities:
-function extractAssertion(image,index,array){
-	oven.extract(image,function(err,assertion){
-		if(err){ 
-			log_error("Could not extract assertion from image #" + index + ": " + err.message); 
-			report[index].errors.push(err.message);
-		}
-		else{
-			report[index].assertion=assertion;
-			matchAssertionToSchema(assertion,index,array);
-		}
-	});
-}
-
-function matchAssertionToSchema(assertion,imageIndex,array){
-	for (var schemaIndex=0; schemaIndex<schema.length; schemaIndex++){
-		//log_error("SCHEMA INDEX: " + schemaIndex);
-		validateIt(assertion,schemaIndex,imageIndex,array);
-	}
-}
-
-function validateIt(assertion,schemaIndex,imageIndex,array){
-	js.validate(JSON.parse(assertion),schema[schemaIndex],function(validationErrors){
-
-		// for non-matching schema
-		if(validationErrors){
-			//log_error("Jeeves here: Reporting a validation error: " + typeof validationErrors + "\n" + validationErrors + validationErrors.message);
-			report[imageIndex].nonMatchingSchema.push({
-				index: schemaIndex,
-				errors: validationErrors
-			});
-		}
-		//for matching schema
-		else {
-			report[imageIndex].matchingSchema.push({
-				index: schemaIndex
-			});
-			manipulateAssertion(imageIndex,schemaIndex);
-		}
-		evaluateCompleteness();
-	});
-}
-
-function manipulateAssertion(imageIndex,schemaIndex){
-	log_error("NOT IMPLEMENTED: Processing Image #" + imageIndex + " based on Schema #" + schemaIndex);
-} 
-
-
-
-
-//General Utilities:
-function log_error(err){
-	console.log(err);
-	errors.push(err);
-}
-
-
-
-
-
-
-
-
-// function modify_assertion(extract_err,data){
-// 	if (extract_err)
-// 		log_error(extract_err);
-// 	else {
-// 		try{
-// 			a = JSON.parse(data);
-// 		}
-// 		catch(err){
-// 			log_error(err);
-// 			return;
-// 		}
-// 		// switch (make_sure_assertion_has_recipient(a)) {
-// 		// 	case 'unhashed':
-// 		// 		a.recipient.identity = "test@example.com";
-// 		// 		break;
-// 		// 	case 'hashed': 
-// 		// 		var digest = crypto.createHash('sha256').update('test@example.com'+ a.recipient.salt).digest('hex');
-// 		// 		a.recipient.identity = "sha256$" + digest;
-// 		// 		break;
-// 		// 	default: 
-// 		// 		log_error("Didn't get an assertion recipient type understood by modify_assertion");
-// 		// 		break;
-// 		// }
-
-// 	}
-// }
-
-// // find matching schema for assertion
-// function get_schema_matches(badge_contents){
-// 	if (typeof badge_contents === 'string'){
-
-// 	}
-// }
-
-
-// //accepts parsed JSON object of the assertion
-// function make_sure_assertion_has_recipient(assertion){
-// 	if (!assertion.recipient){
-// 			log_error("Assertion has no recipient. Assertion data: \n " + JSON.stringify(assertion));
-// 			return 'no recipient';
-// 		}
-// 	else if (typeof assertion.recipient === 'string')
-// 	else if (assertion.recipient.type != "email"){
-// 		log_error("Assertion has a non-email recipient identity type. Assertion data: \n " + JSON.stringify(assertion));
-// 		return 'non-email';
-// 	}
-// 	else if (assertion.recipient.hashed === false) {
-// 		return 'unhashed';
-// 	}
-// 	else if (assertion.recipient.hashed === true && typeof assertion.recipient.salt === 'string'){
-// 		return 'hashed';
-// 	}
-// 	else{
-// 		log_error("I couldn't understand this assertion. Assertion data: \n" + JSON.stringify(assertion));
-// 		return 'unknown';
-// 	}
-// }
-
-
-
-// function save_file_to_output_directory(reconstructed_file){
-// 	return;
-// }

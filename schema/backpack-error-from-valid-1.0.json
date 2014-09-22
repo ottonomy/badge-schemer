@@ -1,13 +1,14 @@
 {
 	"$schema": "http://json-schema.org/draft-04/schema#",
-	"title": "0.5 Badge Assertion",
-	"description": "An amalgam of 0.5.0 OBI specifications mandates that the assertion be an object with embedded badge and issuer properties.",
+	"title": "Totally 1.0-compliant w/linked Badge Class",
+	"description": "The 1.0 OBI specification mandates that the baked assertion be an object with linked Badge Class",
+	"type": "object",
 	"definitions": {
 		"ISODateTime": {
-            "description": "ISO 8601 date format string yyyy-mm-dd",
+            "description": "ISO 8601 date format string yyyy-MM-dd'T'HH:mm:ss.SSS with optional .SSS milliseconds",
             "allOf": { "type": "string" },
             "oneOf": [
-                { "pattern": "^\\d{4}-[01]\\d-[0-3]\\d$" }
+                { "pattern": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d((.|,)\\d{1,3})?(Z|[+-][0-2]\\d(:?[0-5]\\d)?)$" }
             ]
         },
         "UNIXTimeStamp": {
@@ -20,6 +21,10 @@
             { "$ref": "#/definitions/ISODateTime" },
             { "$ref": "#/definitions/UNIXTimeStamp" }
             ]
+        },
+		"IdentityType": {
+            "type": "string",
+            "enum": ["email"]
         },
         "HashString": {
             "allOf": [ { "type": "string" } ],
@@ -34,15 +39,38 @@
                 }
             ]    
         },
+        "IdentityObject": { 
+            "title": "Badge Identity Object",
+            "type": "object",
+            "properties": {
+                "identity": {
+                    "oneOf": [
+                        { "$ref": "#/definitions/HashString"},
+                        { "type": "string", "format": "email"}
+                    ]
+                },
+                "type": { "$ref": "#/definitions/IdentityType" },
+                "hashed": { "type": "boolean" },
+                "salt": { "type": "string" }
+            },
+            "required": ["identity","type","hashed"]
+        },
+        "VerificationObject": { 
+            "type": "object",
+            "properties": {
+                "type": { 
+                    "title": "VerificationType",
+                    "type": "string", 
+                    "enum": ["hosted", "signed"] 
+                },
+                "url": { "type": "string", "format": "uri" }
+            },
+            "required": ["type"]
+        },
         "BadgeObject": {
             "description": "an object describing the achievement earned by the recipient of the assertion.",
             "type": "object",
             "properties": {
-                "version": { 
-                    "description": "The version of the OBI specification used. 0.5.0 in this case.",
-                    "type": "string", 
-                    "pattern": "0\\.5\\.0" 
-                },
                 "name": {  
                     "description": "Human-readable name of the badge being issued. Maximum of 128 characters.",
                     "type": "string"
@@ -57,15 +85,17 @@
                     "type": "string", 
                     "format": "uri" 
                 },
-                "issuer": { "$ref": "#/definitions/Issuer" }
+                "issuer": { "$ref": "#/definitions/Issuer" },
+                "_location": { "type": "string", "format": "uri" }
             },
-            "required": ["name","image","description","criteria","issuer"]
+            "required": ["name","image","description","criteria","issuer","_location"]
         },
         "Issuer": {
             "description": "Information about the issuer.",
             "type": "object",
             "properties": {
                 "origin": { "type": "string", "format": "uri", "description": "Origin of the issuer. This is the <protocol>://<host>:<port>. Must match the origin of the hosted assertion (and in the future, the origin of the public key)." },
+                "url": { "type": "string", "format": "url" },
                 "name": {  
                     "description": "Human-readable name of the issuing agent.",
                     "type": "string"
@@ -78,40 +108,21 @@
                     "description": "(OPTIONAL) A human-monitored email address associated with the issuer.",
                     "type": "string",
                     "format": "email"
-                }
+                },
+                "_location": { "type": "string", "format": "uri" }
             },
-            "required": ["origin", "name"]
+            "required": ["origin", "name", "_location"]
         }
+	},
+	"properties": {
+		"uid": { "type": "string" },
+        "_originalRecipient": { "$ref": "#/definitions/IdentityObject" },
+        "badge": { "$ref": "#/definitions/BadgeObject" },
+        "verify": { "$ref": "#/definitions/VerificationObject" },
+        "issued_on": { "$ref": "#/definitions/DateTime" },
+        "evidence": { "type": "string", "format": "uri" },
+        "expires": { "$ref": "#/definitions/DateTime" }
     },
-
-    "allOf": [{
-        "type": "object",
-        "properties": {
-            "badge": { "$ref": "#/definitions/BadgeObject" },
-            "issued_on": { "$ref": "#/definitions/DateTime" },
-            "expires": { "$ref": "#/definitions/DateTime" },
-            "evidence": { "type": "string", "format": "uri" }
-        },
-        "required": ["badge"],
-        "additionalProperties": true
-    }],
-    "oneOf":  [
-        { 
-            "description": "Hashed and salted recipient identity. As updated March 2012",
-            "type": "object",
-            "properties": {
-                "recipient": { "$ref": "#/definitions/HashString"},
-                "salt": { "type": "string" }
-            },
-            "required": ["recipient"]
-        },
-        {
-             "description": "Unobscured plaintext email address of recipient identity. Original as of Fall 2011",
-            "type":"object",
-            "properties": {
-                "recipient": { "type": "string", "format": "email" }
-            },
-            "required": "recipient"
-        }
-    ] 
+    "required": ["uid", "recipient", "badge", "verify", "issued_on"],
+    "additionalProperties": true   
 }
