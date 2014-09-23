@@ -237,25 +237,45 @@ function findSchemaMatch(assertion, search_tree, filename){
 */
 function evaluateCompleteness(){
 	if (report.images.length === report.imageCount){
-		for (var i=0; i<report.images.length;i++){
-			img = report.images[i]
-			console.log(
-				'\n\n=========== IMAGE NUMBER ' + i + ' ===========' +
-				'\nfilename: ' + img.filename + 
-				'\nassertion: ' + clc.green(JSON.stringify(img.assertion)) +
-				'\nmatchingSchemaKeys: ' + img.matchingSchemaKeys
-			);
-			if(img.nonMatches.length>0){
-				console.log('nonMatches:');
-				for (var j=0;j<img.nonMatches.length;j++){
-					nm = img.nonMatches[j]
-					console.log('Schema: ' +nm.schemaKey);
-					console.log(clc.red(JSON.stringify(nm.errorMessage)));
-				}
-			}
-			console.log('======================================');
-		}
+		generateReport();
 	}
+}
+
+function generateReport(){
+	var totals = {};
+	function addToTotal(key){
+		if (typeof totals[key] != 'undefined')
+			totals[key]++;
+		else
+			totals[key]=1;
+	}
+
+	for (var i=0; i<report.images.length;i++){
+		img = report.images[i]
+		if (img.matchingSchemaKeys.length === 0)
+			addToTotal("noMatch");
+		for (var j=0;j<img.matchingSchemaKeys.length;j++){
+			addToTotal(img.matchingSchemaKeys[j]);
+		}
+		console.log(
+			'\n\n=========== IMAGE NUMBER ' + i + ' ===========' +
+			'\nfilename: ' + img.filename + 
+			'\nassertion: \n' + clc.green(JSON.stringify(img.assertion,null, "  ")) +
+			'\nmatchingSchemaKeys: ' + img.matchingSchemaKeys
+		);
+		if(img.nonMatches.length>0){
+			console.log('nonMatches:');
+			for (var j=0;j<img.nonMatches.length;j++){
+				nm = img.nonMatches[j]
+				console.log('Schema: ' +nm.schemaKey);
+				console.log(clc.red(JSON.stringify(nm.errorMessage, null, "  ")));
+			}
+		}
+		console.log('======================================');
+	}
+
+
+	console.log(clc.magentaBright(JSON.stringify(totals)));
 }
 
 
